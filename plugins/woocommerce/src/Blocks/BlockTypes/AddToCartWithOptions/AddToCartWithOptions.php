@@ -32,11 +32,13 @@ class AddToCartWithOptions extends AbstractBlock {
 	 *                           Note, this will be empty in the editor context when the block is
 	 *                           not in the post content on editor load.
 	 */
-	protected function enqueue_data( array $attributes = [] ) {
+	protected function enqueue_data( array $attributes = array() ) {
 		parent::enqueue_data( $attributes );
-		$this->asset_data_registry->add( 'isBlockifiedAddToCart', Features::is_enabled( 'blockified-add-to-cart' ) );
-		$this->asset_data_registry->add( 'productTypes', wc_get_product_types() );
-		$this->asset_data_registry->add( 'addToCartWithOptionsTemplatePartIds', $this->get_template_part_ids() );
+
+		if ( is_admin() && ! WC()->is_rest_api_request() ) {
+			$this->asset_data_registry->add( 'productTypes', wc_get_product_types() );
+			$this->asset_data_registry->add( 'addToCartWithOptionsTemplatePartIds', $this->get_template_part_ids() );
+		}
 	}
 
 	/**
@@ -81,6 +83,26 @@ class AddToCartWithOptions extends AbstractBlock {
 	}
 
 	/**
+	 * Check if a child product is purchasable.
+	 *
+	 * @param \WC_Product $product The product to check.
+	 * @return bool True if the product is purchasable, false otherwise.
+	 */
+	private function is_child_product_purchasable( \WC_Product $product ) {
+		// Skip variable products.
+		if ( $product->is_type( 'variable' ) ) {
+			return false;
+		}
+
+		// Skip grouped products.
+		if ( $product->is_type( 'grouped' ) ) {
+			return false;
+		}
+
+		return $product->is_purchasable() && $product->is_in_stock();
+	}
+
+	/**
 	 * Render the block.
 	 *
 	 * @param array    $attributes Block attributes.
@@ -92,14 +114,14 @@ class AddToCartWithOptions extends AbstractBlock {
 	protected function render( $attributes, $content, $block ) {
 		global $product;
 
-		$post_id = $block->context['postId'];
+		$product_id = $block->context['postId'];
 
-		if ( ! isset( $post_id ) ) {
+		if ( ! isset( $product_id ) ) {
 			return '';
 		}
 
 		$previous_product = $product;
-		$product          = wc_get_product( $post_id );
+		$product          = wc_get_product( $product_id );
 		if ( ! $product instanceof \WC_Product ) {
 			$product = $previous_product;
 
@@ -156,42 +178,121 @@ class AddToCartWithOptions extends AbstractBlock {
 				$template_part_contents = file_get_contents( $template_part_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			}
 
-			/**
-			 * Filters the change the quantity to add to cart.
-			 *
-			 * @since 10.9.0
-			 * @param number $default_quantity The default quantity.
-			 * @param number $product_id The product id.
-			 */
-			$default_quantity = apply_filters( 'woocommerce_add_to_cart_quantity', 1, $product->get_id() );
+			$default_quantity = $product->get_min_purchase_quantity();
 
 			wp_interactivity_state(
 				'woocommerce/add-to-cart-with-options',
 				array(
-					'isFormValid' => ! $product->is_type( 'variable' ),
+					'isFormValid' => function () {
+						$context = wp_interactivity_get_context();
+						$product = wc_get_product( $context['productId'] );
+						if ( $product instanceof \WC_Product && $product->is_type( 'variable' ) ) {
+							return false;
+						}
+						return true;
+					},
 					'variationId' => null,
+				)
+			);
+
+			wp_interactivity_state(
+				'woocommerce',
+				array(
+					// Use camelCase for error messages generated from the frontend,
+					// and snake_case for error messages generated from the backend.
+					'errorMessages' => array(
+						'groupedProductAddToCartMissingItems' => __(
+							'Please select some products to add to the cart.',
+							'woocommerce'
+						),
+						'woocommerce_rest_missing_attributes' => __(
+							'Please select product attributes before adding to cart.',
+							'woocommerce'
+						),
+					),
 				)
 			);
 
 			$context = array(
 				'productId'   => $product->get_id(),
 				'productType' => $product->get_type(),
-				'quantity'    => $default_quantity,
+				'quantity'    => array( $product->get_id() => $default_quantity ),
 			);
 
 			if ( $product->is_type( 'variable' ) ) {
-				$context['selectedAttributes']  = array();
-				$available_variations           = $product->get_available_variations();
-				$available_variations_data      = array_map(
-					function ( $variation ) {
-						return array(
-							'variation_id' => $variation['variation_id'],
-							'attributes'   => $variation['attributes'],
+				$context['selectedAttributes'] = array();
+				$available_variations          = $product->get_available_variations( 'objects' );
+				foreach ( $available_variations as $variation ) {
+					$default_variation_quantity                  = $variation->get_min_purchase_quantity();
+					$context['quantity'][ $variation->get_id() ] = $default_variation_quantity;
+					$context['availableVariations'][]            = array(
+						'variation_id' => $variation->get_id(),
+						'attributes'   => $variation->get_variation_attributes(),
+						'is_in_stock'  => $variation->is_in_stock(),
+					);
+				}
+			}
+
+			if ( $product->is_type( 'grouped' ) ) {
+				// Add context for purchasable child products.
+				$children_product_data = array();
+				foreach ( $product->get_children() as $child_product_id ) {
+					$child_product = wc_get_product( $child_product_id );
+					if ( $child_product && $this->is_child_product_purchasable( $child_product ) ) {
+						$child_product_quantity_constraints = Utils::get_product_quantity_constraints( $child_product );
+
+						$children_product_data[ $child_product_id ] = array(
+							'min'  => $child_product_quantity_constraints['min'],
+							'max'  => $child_product_quantity_constraints['max'],
+							'step' => $child_product_quantity_constraints['step'],
 						);
-					},
-					$available_variations
+					}
+				}
+
+				$context['groupedProductIds'] = array_keys( $children_product_data );
+				wp_interactivity_state(
+					'woocommerce',
+					array(
+						'products' => $children_product_data,
+					)
 				);
-				$context['availableVariations'] = $available_variations_data;
+
+				// Add quantity context for purchasable child products.
+				$context['quantity'] = array_fill_keys(
+					$context['groupedProductIds'],
+					$default_quantity
+				);
+
+				// Set default quantity for each child product.
+				foreach ( $context['groupedProductIds'] as $child_product_id ) {
+					$child_product = wc_get_product( $child_product_id );
+					if ( $child_product ) {
+
+						$default_child_quantity = isset( $_POST['quantity'][ $child_product->get_id() ] ) ? wc_stock_amount( wc_clean( wp_unslash( $_POST['quantity'][ $child_product->get_id() ] ) ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+						$context['quantity'][ $child_product_id ] = $default_child_quantity;
+
+						// Check for any "sold individually" products and set their default quantity to 0.
+						if ( $child_product->is_sold_individually() ) {
+							$context['quantity'][ $child_product_id ] = 0;
+						}
+					}
+				}
+			} else {
+				$product_quantity_constraints = Utils::get_product_quantity_constraints( $product );
+
+				wp_interactivity_state(
+					'woocommerce',
+					array(
+						'products' => array(
+							$product->get_id() => array(
+								'min'  => $product_quantity_constraints['min'],
+								'max'  => $product_quantity_constraints['max'],
+								'step' => $product_quantity_constraints['step'],
+							),
+						),
+					)
+				);
 			}
 
 			$hooks_before = '';
@@ -203,17 +304,24 @@ class AddToCartWithOptions extends AbstractBlock {
 			* This hook allows to disable the compatibility layer for the blockified.
 			*
 			* @since 7.6.0
-			* @param boolean.
+			* @param boolean $is_disabled_compatibility_layer Whether the compatibility layer should be disabled.
 			*/
 			$is_disabled_compatibility_layer = apply_filters( 'woocommerce_disable_compatibility_layer', false );
 
-			if ( ! $is_disabled_compatibility_layer ) {
+			if ( ! $is_disabled_compatibility_layer && ! Utils::is_not_purchasable_product( $product ) ) {
 				ob_start();
-				if ( ProductType::SIMPLE === $product_type && $product->is_in_stock() && $product->is_purchasable() ) {
+				/**
+				 * Hook: woocommerce_before_add_to_cart_form.
+				 *
+				 * @since 10.1.0
+				 */
+				do_action( 'woocommerce_before_add_to_cart_form' );
+
+				if ( ProductType::SIMPLE === $product_type ) {
 					/**
 					 * Hook: woocommerce_before_add_to_cart_quantity.
 					 *
-					 * @since 2.7.0
+					 * @since 10.0.0
 					 */
 					do_action( 'woocommerce_before_add_to_cart_quantity' );
 					/**
@@ -285,14 +393,14 @@ class AddToCartWithOptions extends AbstractBlock {
 					/**
 					 * Hook: woocommerce_before_add_to_cart_quantity.
 					 *
-					 * @since 2.7.0
+					 * @since 10.0.0
 					 */
 					do_action( 'woocommerce_before_add_to_cart_quantity' );
 				}
 				$hooks_before = ob_get_clean();
 
 				ob_start();
-				if ( ProductType::SIMPLE === $product_type && $product->is_in_stock() && $product->is_purchasable() ) {
+				if ( ProductType::SIMPLE === $product_type ) {
 					/**
 					 * Hook: woocommerce_after_add_to_cart_quantity.
 					 *
@@ -345,6 +453,14 @@ class AddToCartWithOptions extends AbstractBlock {
 					 */
 					do_action( 'woocommerce_after_variations_form' );
 				}
+
+				/**
+				 * Hook: woocommerce_after_add_to_cart_form.
+				 *
+				 * @since 10.1.0
+				 */
+				do_action( 'woocommerce_after_add_to_cart_form' );
+
 				$hooks_after = ob_get_clean();
 			}
 
@@ -367,7 +483,6 @@ class AddToCartWithOptions extends AbstractBlock {
 
 			$cart_redirect_after_add = get_option( 'woocommerce_cart_redirect_after_add' );
 			$form_attributes         = '';
-			$hidden_input            = '';
 			$legacy_mode             = $hooks_before || $hooks_after || 'yes' === $cart_redirect_after_add;
 			if ( $legacy_mode ) {
 				// If an extension is hoooking into the form or we need to redirect to the cart,
@@ -385,16 +500,8 @@ class AddToCartWithOptions extends AbstractBlock {
 					),
 					'method'  => 'post',
 					'enctype' => 'multipart/form-data',
+					'class'   => 'cart',
 				);
-				if ( ProductType::SIMPLE === $product_type ) {
-					$hidden_input = '<input type="hidden" name="add-to-cart" value="' . $product->get_id() . '" />';
-				} elseif ( ProductType::GROUPED === $product_type ) {
-					$hidden_input = '<input type="hidden" name="add-to-cart" value="' . $product->get_id() . '" />';
-				} elseif ( ProductType::VARIABLE === $product_type ) {
-					$hidden_input  = '<input type="hidden" name="add-to-cart" value="' . $product->get_id() . '" />';
-					$hidden_input .= '<input type="hidden" name="product_id" value="' . $product->get_id() . '" />';
-					$hidden_input .= '<input type="hidden" name="variation_id" data-wp-interactive="woocommerce/add-to-cart-with-options" data-wp-bind--value="state.variationId" />';
-				}
 			} else {
 				// Otherwise, we use the Interactivity API.
 				$form_attributes = array(
@@ -402,9 +509,42 @@ class AddToCartWithOptions extends AbstractBlock {
 				);
 			}
 
+			// These hidden inputs are used by extensions or Express Payment methods to gather information of the form state.
+			$hidden_input = '';
+			if ( ProductType::SIMPLE === $product_type ) {
+				$hidden_input = '<input type="hidden" name="add-to-cart" value="' . esc_attr( $product_id ) . '" />';
+			} elseif ( ProductType::GROUPED === $product_type ) {
+				$hidden_input = '<input type="hidden" name="add-to-cart" value="' . esc_attr( $product_id ) . '" />';
+			} elseif ( ProductType::VARIABLE === $product_type ) {
+				$hidden_input = '<div class="single_variation_wrap">
+					<input type="hidden" name="add-to-cart" value="' . esc_attr( $product_id ) . '" />
+					<input type="hidden" name="product_id" value="' . esc_attr( $product_id ) . '" />
+					<input type="hidden"
+						name="variation_id"
+						data-wp-bind--value="state.variationId"
+					/>
+				</div>';
+			}
+
 			$form_html = sprintf(
 				'<form %1$s>%2$s%3$s%4$s%5$s</form>',
-				get_block_wrapper_attributes( array_merge( $wrapper_attributes, $form_attributes ) ),
+				get_block_wrapper_attributes(
+					array_merge(
+						$wrapper_attributes,
+						$form_attributes,
+						array(
+							'class' => implode(
+								' ',
+								array_filter(
+									array(
+										isset( $wrapper_attributes['class'] ) ? $wrapper_attributes['class'] : '',
+										isset( $form_attributes['class'] ) ? $form_attributes['class'] : '',
+									)
+								)
+							),
+						)
+					)
+				),
 				$hooks_before,
 				$template_part_blocks,
 				$hooks_after,
@@ -475,7 +615,7 @@ class AddToCartWithOptions extends AbstractBlock {
 				<div
 					class="wc-block-components-notice-banner"
 					data-wp-class--is-error="state.isError"
-					data-wp-class--is-success ="state.isSuccess"
+					data-wp-class--is-success="state.isSuccess"
 					data-wp-class--is-info="state.isInfo"
 					data-wp-class--is-dismissible="context.notice.dismissible"
 					data-wp-bind--role="state.role"
@@ -484,7 +624,7 @@ class AddToCartWithOptions extends AbstractBlock {
 						<path data-wp-bind--d="state.iconPath"></path>
 					</svg>
 					<div class="wc-block-components-notice-banner__content">
-						<span data-wp-init="callbacks.renderNoticeContent"></span>
+						<span data-wp-init="callbacks.renderNoticeContent" aria-live="assertive" aria-atomic="true"></span>
 					</div>
 					<button
 						data-wp-bind--hidden="!context.notice.dismissible"

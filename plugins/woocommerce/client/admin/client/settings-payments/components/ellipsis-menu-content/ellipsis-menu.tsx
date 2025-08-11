@@ -42,7 +42,8 @@ export const EllipsisMenuWrapper = ( {
 		provider._type === 'gateway' &&
 		provider.state?.account_connected &&
 		( provider.onboarding?.state?.test_mode ||
-			! provider.onboarding?.state?.completed );
+			! provider.onboarding?.state?.completed ) &&
+		!! provider.onboarding?._links?.reset?.href;
 
 	return (
 		<>
@@ -50,15 +51,9 @@ export const EllipsisMenuWrapper = ( {
 				label={ label }
 				renderContent={ ( { onToggle } ) => (
 					<EllipsisMenuContent
-						providerId={ provider.id }
+						provider={ provider }
 						pluginFile={ provider.plugin.file }
 						isSuggestion={ provider._type === 'suggestion' }
-						suggestionId={ provider._suggestion_id || '' }
-						suggestionHideUrl={
-							provider._type === 'suggestion'
-								? provider._links?.hide?.href
-								: ''
-						}
 						links={ provider.links }
 						onToggle={ onToggle }
 						isEnabled={ provider.state?.enabled }
@@ -75,6 +70,7 @@ export const EllipsisMenuWrapper = ( {
 				isOpen={ resetAccountModalVisible }
 				onClose={ () => setResetAccountModalVisible( false ) }
 				isTestMode={ provider.onboarding?.state?.test_mode }
+				resetUrl={ provider.onboarding?._links?.reset?.href }
 			/>
 		</>
 	);

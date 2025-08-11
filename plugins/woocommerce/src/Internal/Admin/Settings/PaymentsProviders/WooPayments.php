@@ -36,15 +36,20 @@ class WooPayments extends PaymentGateway {
 	 * @param int                $order        Optional. The order to assign.
 	 *                                         Defaults to 0 if not provided.
 	 * @param string             $country_code Optional. The country code for which the details are being gathered.
-	 *                                         This should be a ISO 3166-1 alpha-2 country code.
+	 *                                         This should be an ISO 3166-1 alpha-2 country code.
 	 *
 	 * @return array The payment gateway provider details.
 	 */
 	public function get_details( WC_Payment_Gateway $gateway, int $order = 0, string $country_code = '' ): array {
 		$details = parent::get_details( $gateway, $order, $country_code );
 
+		$has_test_account = $this->has_test_drive_account();
+
 		// Switch the onboarding type to native.
 		$details['onboarding']['type'] = self::ONBOARDING_TYPE_NATIVE;
+
+		// Add the test [drive] account details to the onboarding state.
+		$details['onboarding']['state']['test_drive_account'] = $has_test_account;
 
 		// Add WPCOM/Jetpack connection details to the onboarding state.
 		$details['onboarding']['state'] = array_merge( $details['onboarding']['state'], $this->get_wpcom_connection_state() );
@@ -65,6 +70,37 @@ class WooPayments extends PaymentGateway {
 		$details['onboarding']['_links']['onboard'] = array(
 			'href' => Utils::wc_payments_settings_url( '/woopayments/onboarding', array( 'from' => Payments::FROM_PAYMENTS_SETTINGS ) ),
 		);
+
+		try {
+			/**
+			 * The WooPayments REST controller instance.
+			 *
+			 * @var WooPaymentsRestController $rest_controller
+			 */
+			$rest_controller = wc_get_container()->get( WooPaymentsRestController::class );
+
+			// Add disable test account URL to onboarding links, if the current account is a test account.
+			if ( $has_test_account ) {
+				$details['onboarding']['_links']['disable_test_account'] = array(
+					'href' => rest_url( $rest_controller->get_rest_url_path( 'onboarding/test_account/disable' ) ),
+				);
+			}
+
+			// Add reset account/onboarding URL to onboarding links.
+			$details['onboarding']['_links']['reset'] = array(
+				'href' => rest_url( $rest_controller->get_rest_url_path( 'onboarding/reset' ) ),
+			);
+		} catch ( \Throwable $e ) {
+			// If the REST controller is not available, we can't generate the REST API endpoint URLs.
+			// This is not a critical error, so we just ignore it.
+			// Log so we can investigate.
+			SafeGlobalFunctionProxy::wc_get_logger()->error(
+				'Failed to get the WooPayments REST controller instance: ' . $e->getMessage(),
+				array(
+					'source' => 'settings-payments',
+				)
+			);
+		}
 
 		return $details;
 	}
@@ -137,7 +173,6 @@ class WooPayments extends PaymentGateway {
 					'Failed to get the WooPayments REST controller instance: ' . $e->getMessage(),
 					array(
 						'source' => 'settings-payments',
-						'error'  => $e,
 					)
 				);
 			}
@@ -177,15 +212,9 @@ class WooPayments extends PaymentGateway {
 			return true;
 		}
 
-		if ( function_exists( '\wcpay_get_container' ) && class_exists( '\WC_Payments_Account' ) ) {
-			$account = \wcpay_get_container()->get( \WC_Payments_Account::class );
-			if ( is_callable( array( $account, 'get_account_status_data' ) ) ) {
-				// Test-drive accounts don't need setup.
-				$account_status = $account->get_account_status_data();
-				if ( ! empty( $account_status['testDrive'] ) ) {
-					return false;
-				}
-			}
+		// Test-drive accounts don't need setup.
+		if ( $this->has_test_drive_account() ) {
+			return false;
 		}
 
 		return parent::needs_setup( $payment_gateway );
@@ -387,7 +416,7 @@ class WooPayments extends PaymentGateway {
 		// This way we avoid costly DB queries and API calls.
 		$has_orders = get_transient( $store_has_orders_transient_name );
 		if ( false !== $has_orders ) {
-			return filter_var( $has_orders, FILTER_VALIDATE_BOOLEAN );
+			return wc_string_to_bool( $has_orders );
 		}
 
 		// We need to determine the value.
@@ -449,5 +478,23 @@ class WooPayments extends PaymentGateway {
 		);
 
 		return ! empty( $other_ecommerce_gateways );
+	}
+
+	/**
+	 * Determines if the current account is a test-drive account.
+	 *
+	 * @return bool True if the account is a test-drive account, false otherwise.
+	 */
+	private function has_test_drive_account(): bool {
+		if ( function_exists( '\wcpay_get_container' ) && class_exists( '\WC_Payments_Account' ) ) {
+			$account_service = \wcpay_get_container()->get( \WC_Payments_Account::class );
+			if ( ! empty( $account_service ) && is_callable( array( $account_service, 'get_account_status_data' ) ) ) {
+				$account_status = $account_service->get_account_status_data();
+
+				return ! empty( $account_status['testDrive'] );
+			}
+		}
+
+		return false;
 	}
 }

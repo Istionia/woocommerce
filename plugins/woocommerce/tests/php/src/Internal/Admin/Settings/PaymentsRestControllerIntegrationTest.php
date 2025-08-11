@@ -223,7 +223,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		add_filter( 'user_has_cap', $filter_callback );
 
 		// Act.
-		$request  = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request  = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$response = $this->server->dispatch( $request );
 
 		// Assert.
@@ -248,7 +248,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		add_filter( 'user_has_cap', $filter_callback );
 
 		// Act.
-		$request  = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request  = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$response = $this->server->dispatch( $request );
 
 		// Assert.
@@ -296,7 +296,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		add_filter( 'user_has_cap', $filter_callback );
 
 		// Act.
-		$request = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$request->set_param( 'location', 'US' );
 		$response = $this->server->dispatch( $request );
 
@@ -342,7 +342,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$this->enable_core_paypal_pg();
 
 		// Act.
-		$request = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$request->set_param( 'location', 'US' );
 		$response = $this->server->dispatch( $request );
 
@@ -391,7 +391,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		update_option( 'woocommerce_default_country', 'LI' ); // Liechtenstein.
 
 		// Act.
-		$request  = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request  = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$response = $this->server->dispatch( $request );
 
 		// Assert.
@@ -433,7 +433,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$this->enable_core_paypal_pg();
 
 		// Act.
-		$request = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$request->set_param( 'location', 'XX' );
 		$response = $this->server->dispatch( $request );
 
@@ -466,7 +466,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$this->enable_core_paypal_pg();
 
 		// Act.
-		$request = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$request->set_param( 'location', 'U' );
 		$response = $this->server->dispatch( $request );
 
@@ -474,7 +474,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$this->assertSame( 400, $response->get_status() );
 
 		// Act.
-		$request = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$request->set_param( 'location', '12' );
 		$response = $this->server->dispatch( $request );
 
@@ -482,7 +482,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$this->assertSame( 400, $response->get_status() );
 
 		// Act.
-		$request = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$request->set_param( 'location', 'USA' );
 		$response = $this->server->dispatch( $request );
 
@@ -508,7 +508,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$this->mock_payment_gateways();
 
 		// Act.
-		$request = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$request->set_param( 'location', 'US' );
 		$response = $this->server->dispatch( $request );
 
@@ -528,9 +528,9 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 			array(
 				PaymentsProviders::OFFLINE_METHODS_ORDERING_GROUP,
 				WC_Gateway_Paypal::ID,
+				PaymentsProviders::SUGGESTION_ORDERING_PREFIX . PaymentsExtensionSuggestions::WOOPAYMENTS, // The WooPayments suggestion.
+				'woocommerce_payments', // The fake WooPayments gateway.
 				PaymentsProviders::SUGGESTION_ORDERING_PREFIX . PaymentsExtensionSuggestions::PAYPAL_FULL_STACK, // Preferred suggestion.
-				PaymentsProviders::SUGGESTION_ORDERING_PREFIX . PaymentsExtensionSuggestions::WOOPAYMENTS,      // The WooPayments suggestion.
-				'woocommerce_payments',                                                                         // The fake WooPayments gateway.
 			),
 			array_column( $data['providers'], 'id' )
 		);
@@ -543,7 +543,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$this->assertCount( 4, $data['suggestion_categories'] );
 
 		// Assert that the WooPayments suggestion has all the details, including the incentive data.
-		$suggestion = $data['providers'][3];
+		$suggestion = $data['providers'][2];
 		$this->assertArrayHasKey( 'id', $suggestion, 'Provider (suggestion) `id` entry is missing' );
 		$this->assertArrayHasKey( '_order', $suggestion, 'Provider (suggestion) `_order` entry is missing' );
 		$this->assertArrayHasKey( '_type', $suggestion, 'Provider (suggestion) `_type` entry is missing' );
@@ -585,7 +585,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'hide', $suggestion['_links'], 'Provider (suggestion) `_links[hide]` entry is missing' );
 
 		// Assert that the fake WooPayments gateway is returned as NOT enabled.
-		$provider = $data['providers'][4];
+		$provider = $data['providers'][3];
 		$this->assertFalse( $provider['state']['enabled'] );
 		// Assert that the fake WooPayments gateway has all the details.
 		$this->assertArrayHasKey( 'id', $provider, 'Provider (gateway) `id` entry is missing' );
@@ -925,7 +925,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 
 		// Act.
-		$request = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$request->set_param( 'location', 'US' );
 		$response = $this->server->dispatch( $request );
 
@@ -944,7 +944,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		delete_user_meta( $this->store_admin_id, Payments::PAYMENTS_NOX_PROFILE_KEY );
 
 		// Act.
-		$request = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$request->set_param( 'location', 'US' );
 		$response = $this->server->dispatch( $request );
 
@@ -986,7 +986,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 
 		// Act.
-		$request = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$request->set_param( 'location', 'US' );
 		$response = $this->server->dispatch( $request );
 
@@ -996,17 +996,17 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$data = $response->get_data();
 
 		// Assert that the incentive is not in the WooPayments suggestion anymore.
-		$suggestion = $data['providers'][3];
+		$suggestion = $data['providers'][2];
 		$this->assertArrayNotHasKey( '_incentive', $suggestion );
 		// Assert that the incentive is not in the WooPayments gateway anymore.
-		$gateway = $data['providers'][4];
+		$gateway = $data['providers'][3];
 		$this->assertArrayNotHasKey( '_incentive', $gateway );
 
 		// Delete the user meta.
 		delete_user_meta( get_current_user_id(), Incentive::PREFIX . 'dismissed' );
 
 		// Act.
-		$request = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$request->set_param( 'location', 'US' );
 		$response = $this->server->dispatch( $request );
 
@@ -1016,10 +1016,10 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$data = $response->get_data();
 
 		// Assert that the incentive is in the WooPayments suggestion again.
-		$suggestion = $data['providers'][3];
+		$suggestion = $data['providers'][2];
 		$this->assertArrayHasKey( '_incentive', $suggestion );
 		// Assert that the incentive is in the WooPayments gateway again.
-		$gateway = $data['providers'][4];
+		$gateway = $data['providers'][3];
 		$this->assertArrayHasKey( '_incentive', $gateway );
 
 		// Clean up.
@@ -1058,7 +1058,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$this->assertSame( 200, $response->get_status() );
 
 		// Act.
-		$request = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$request->set_param( 'location', 'US' );
 		$response = $this->server->dispatch( $request );
 
@@ -1068,11 +1068,11 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		$data = $response->get_data();
 
 		// Assert that the incentive is in the WooPayments suggestion with the right dismissals list.
-		$suggestion = $data['providers'][3];
+		$suggestion = $data['providers'][2];
 		$this->assertArrayHasKey( '_incentive', $suggestion );
 		$this->assertEquals( $context, $suggestion['_incentive']['_dismissals'][0]['context'] );
 		// Assert that the incentive is in the WooPayments gateway with the right dismissals list.
-		$gateway = $data['providers'][4];
+		$gateway = $data['providers'][3];
 		$this->assertArrayHasKey( '_incentive', $gateway );
 		$this->assertEquals( $context, $gateway['_incentive']['_dismissals'][0]['context'] );
 
@@ -1164,7 +1164,7 @@ class PaymentsRestControllerIntegrationTest extends WC_REST_Unit_Test_Case {
 		);
 
 		// Act.
-		$request = new WP_REST_Request( 'GET', self::ENDPOINT . '/providers' );
+		$request = new WP_REST_Request( 'POST', self::ENDPOINT . '/providers' );
 		$request->set_param( 'location', 'US' );
 		$response = $this->server->dispatch( $request );
 

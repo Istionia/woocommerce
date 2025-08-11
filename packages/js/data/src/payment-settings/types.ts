@@ -1,4 +1,4 @@
-export interface PaymentGatewayLink {
+export interface PaymentsProviderLink {
 	_type: string;
 	url: string;
 }
@@ -73,6 +73,7 @@ export type PaymentsProviderOnboardingState = {
 	started: boolean;
 	completed: boolean;
 	test_mode: boolean;
+	test_drive_account?: boolean;
 	wpcom_has_working_connection?: boolean;
 	wpcom_is_store_connected?: boolean;
 	wpcom_has_connected_owner?: boolean;
@@ -93,6 +94,7 @@ export type PaymentsEntity = {
 		type?: string;
 	};
 	_links: Record< string, LinkData >;
+	_suggestion_id?: string;
 };
 
 // Represents a payments provider for the main providers list.
@@ -103,17 +105,17 @@ export type PaymentsProvider = PaymentsEntity & {
 	supports?: string[];
 	management?: ManagementData;
 	state?: PaymentsProviderState;
-	links?: PaymentGatewayLink[];
+	links?: PaymentsProviderLink[];
 	onboarding?: {
 		state?: PaymentsProviderOnboardingState;
 		_links?: {
 			onboard?: LinkData; // For gateways, this is used to start the onboarding flow.
+			reset?: LinkData; // For gateways, this is used to reset the account/onboarding.
 		};
 		recommended_payment_methods?: RecommendedPaymentMethod[];
 		type?: string;
 	};
 	tags?: string[];
-	_suggestion_id?: string;
 	_incentive?: PaymentsProviderIncentive;
 };
 
@@ -127,6 +129,8 @@ export type PaymentGatewayProvider = PaymentsProvider & {
 		state: PaymentsProviderOnboardingState;
 		_links: {
 			onboard: LinkData;
+			reset: LinkData;
+			disable_test_account?: LinkData; // URL to disable the test account before proceeding to live account setup.
 		};
 		recommended_payment_methods: RecommendedPaymentMethod[];
 		type: string;
@@ -177,7 +181,7 @@ export type SuggestedPaymentsExtension = PaymentsEntity & {
 	image: string;
 	short_description: string;
 	tags: string[];
-	links: PaymentGatewayLink[];
+	links: PaymentsProviderLink[];
 	_incentive?: PaymentsProviderIncentive;
 };
 

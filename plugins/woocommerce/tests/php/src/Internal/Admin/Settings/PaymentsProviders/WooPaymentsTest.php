@@ -7,6 +7,7 @@ use Automattic\Jetpack\Constants;
 use Automattic\WooCommerce\Internal\Admin\Settings\PaymentsProviders;
 use Automattic\WooCommerce\Internal\Admin\Settings\PaymentsProviders\PaymentGateway;
 use Automattic\WooCommerce\Internal\Admin\Settings\PaymentsProviders\WooPayments;
+use Automattic\WooCommerce\Internal\Admin\Settings\PaymentsProviders\WooPayments\WooPaymentsRestController;
 use Automattic\WooCommerce\Internal\Admin\Settings\PaymentsProviders\WooPayments\WooPaymentsService;
 use Automattic\WooCommerce\Internal\Admin\Settings\Payments;
 use Automattic\WooCommerce\Internal\Admin\Settings\Utils;
@@ -21,6 +22,11 @@ use WC_Unit_Test_Case;
 class WooPaymentsTest extends WC_Unit_Test_Case {
 
 	/**
+	 * @var WooPaymentsRestController
+	 */
+	protected $mock_rest_controller;
+
+	/**
 	 * @var WooPayments
 	 */
 	protected $sut;
@@ -32,6 +38,13 @@ class WooPaymentsTest extends WC_Unit_Test_Case {
 		parent::setUp();
 
 		$this->sut = new WooPayments();
+
+		// Replace the controller in the container so that it can be used during tests.
+		$this->mock_rest_controller = $this->createMock( WooPaymentsRestController::class );
+		$this->mock_rest_controller
+			->method( 'get_rest_url_path' )
+			->willReturn( '/some/rest/path' );
+		wc_get_container()->replace( WooPaymentsRestController::class, $this->mock_rest_controller );
 	}
 
 	/**
@@ -145,6 +158,7 @@ class WooPaymentsTest extends WC_Unit_Test_Case {
 						'started'                      => true,
 						'completed'                    => true,
 						'test_mode'                    => true,
+						'test_drive_account'           => false,
 						'wpcom_has_working_connection' => false,
 						'wpcom_is_store_connected'     => false,
 						'wpcom_has_connected_owner'    => false,
@@ -153,6 +167,9 @@ class WooPaymentsTest extends WC_Unit_Test_Case {
 					'_links'                      => array(
 						'onboard' => array(
 							'href' => Utils::wc_payments_settings_url( '/woopayments/onboarding', array( 'from' => Payments::FROM_PAYMENTS_SETTINGS ) ),
+						),
+						'reset'   => array(
+							'href' => rest_url( '/some/rest/path' ),
 						),
 					),
 					'recommended_payment_methods' => array(
