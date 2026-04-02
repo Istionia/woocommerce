@@ -11,6 +11,7 @@ use Automattic\WooCommerce\Internal\PushNotifications\Controllers\PushNotificati
 use Automattic\WooCommerce\Internal\PushNotifications\Controllers\PushTokenRestController;
 use Automattic\WooCommerce\Internal\PushNotifications\Entities\PushToken;
 use Automattic\WooCommerce\Internal\PushNotifications\Services\NotificationProcessor;
+use Automattic\WooCommerce\Internal\PushNotifications\Services\NotificationRetryHandler;
 use Automattic\WooCommerce\Internal\PushNotifications\Services\PendingNotificationStore;
 use Automattic\WooCommerce\Internal\PushNotifications\Triggers\NewOrderNotificationTrigger;
 use Automattic\WooCommerce\Internal\PushNotifications\Triggers\NewReviewNotificationTrigger;
@@ -82,6 +83,7 @@ class PushNotifications {
 		( new NewReviewNotificationTrigger() )->register();
 
 		wc_get_container()->get( NotificationProcessor::class )->register();
+		wc_get_container()->get( NotificationRetryHandler::class )->register();
 	}
 
 	/**
