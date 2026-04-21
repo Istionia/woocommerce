@@ -39,6 +39,7 @@ use Automattic\WooCommerce\Internal\Caches\ProductVersionStringInvalidator;
 use Automattic\WooCommerce\Internal\Caches\OrdersVersionStringInvalidator;
 use Automattic\WooCommerce\Internal\Caches\TaxRateVersionStringInvalidator;
 use Automattic\WooCommerce\Internal\StockNotifications\StockNotifications;
+use Automattic\WooCommerce\Internal\Admin\Navigation\Bootstrap as NavigationV2Bootstrap;
 use Automattic\Jetpack\Constants;
 
 /**
@@ -378,7 +379,7 @@ final class WooCommerce {
 		$container->get( TaxRateVersionStringInvalidator::class );
 		$container->get( Automattic\WooCommerce\Internal\OrderReviews\Scheduler::class );
 		$container->get( Automattic\WooCommerce\Internal\OrderReviews\Endpoint::class );
-		$container->get( \Automattic\WooCommerce\Internal\Admin\Navigation\Bootstrap::class );
+		$container->get( NavigationV2Bootstrap::class );
 
 		// Feature flags.
 		if ( Constants::is_true( 'WOOCOMMERCE_BIS_ALPHA_ENABLED' ) ) {
