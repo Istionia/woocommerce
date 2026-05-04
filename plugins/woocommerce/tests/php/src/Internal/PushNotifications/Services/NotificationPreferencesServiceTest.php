@@ -351,4 +351,98 @@ class NotificationPreferencesServiceTest extends WC_Unit_Test_Case {
 
 		$this->assertSame( 50.0, $result['store_order']['min_amount'] );
 	}
+
+	/**
+	 * @testdox Should default max_rating to 5 in store_review defaults.
+	 */
+	public function test_get_defaults_includes_max_rating_for_store_review(): void {
+		$defaults = $this->sut->get_defaults();
+
+		$this->assertArrayHasKey( 'max_rating', $defaults['store_review'] );
+		$this->assertSame( 5, $defaults['store_review']['max_rating'] );
+	}
+
+	/**
+	 * @testdox Should clamp max_rating values below 1 to 1.
+	 */
+	public function test_sanitize_clamps_max_rating_below_minimum(): void {
+		$this->data_store->method( 'read' )->willReturn( null );
+
+		$result = $this->sut->save_preferences(
+			$this->user_id,
+			array( 'store_review' => array( 'max_rating' => 0 ) )
+		);
+
+		$this->assertSame( 1, $result['store_review']['max_rating'] );
+
+		$result = $this->sut->save_preferences(
+			$this->user_id,
+			array( 'store_review' => array( 'max_rating' => -3 ) )
+		);
+
+		$this->assertSame( 1, $result['store_review']['max_rating'] );
+	}
+
+	/**
+	 * @testdox Should clamp max_rating values above 5 to 5.
+	 */
+	public function test_sanitize_clamps_max_rating_above_maximum(): void {
+		$this->data_store->method( 'read' )->willReturn( null );
+
+		$result = $this->sut->save_preferences(
+			$this->user_id,
+			array( 'store_review' => array( 'max_rating' => 10 ) )
+		);
+
+		$this->assertSame( 5, $result['store_review']['max_rating'] );
+	}
+
+	/**
+	 * @testdox Should coerce string max_rating to int.
+	 */
+	public function test_sanitize_coerces_max_rating_to_int(): void {
+		$this->data_store->method( 'read' )->willReturn( null );
+
+		$result = $this->sut->save_preferences(
+			$this->user_id,
+			array( 'store_review' => array( 'max_rating' => '3' ) )
+		);
+
+		$this->assertSame( 3, $result['store_review']['max_rating'] );
+	}
+
+	/**
+	 * @testdox Should perform a deep merge so a partial update of enabled preserves existing max_rating.
+	 */
+	public function test_save_preferences_deep_merges_max_rating(): void {
+		$this->data_store->method( 'read' )->willReturn(
+			array(
+				'schema_version' => NotificationPreferencesDataStore::CURRENT_SCHEMA_VERSION,
+				'preferences'    => array(
+					'store_review' => array(
+						'enabled'    => true,
+						'max_rating' => 3,
+					),
+				),
+			)
+		);
+
+		$this->data_store
+			->expects( $this->once() )
+			->method( 'write' )
+			->with(
+				$this->anything(),
+				$this->callback(
+					function ( $envelope ) {
+						$prefs = $envelope['preferences']['store_review'];
+						return false === $prefs['enabled'] && 3 === $prefs['max_rating'];
+					}
+				)
+			);
+
+		$this->sut->save_preferences(
+			$this->user_id,
+			array( 'store_review' => array( 'enabled' => false ) )
+		);
+	}
 }

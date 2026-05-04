@@ -116,7 +116,8 @@ class NotificationPreferencesService {
 			$defaults[ $type ] = array( 'enabled' => true );
 		}
 
-		$defaults['store_order']['min_amount'] = null;
+		$defaults['store_order']['min_amount']  = null;
+		$defaults['store_review']['max_rating'] = 5;
 
 		return $defaults;
 	}
@@ -177,7 +178,15 @@ class NotificationPreferencesService {
 				$sanitized[ $sub_key ] = $amount > 0 ? $amount : null;
 				continue;
 			}
-		}
+
+			if ( 'max_rating' === $sub_key ) {
+				$rating                = array_key_exists( $sub_key, $value )
+					? (int) $value[ $sub_key ]
+					: (int) $sub_default;
+				$sanitized[ $sub_key ] = max( 1, min( 5, $rating ) );
+				continue;
+			}
+		}//end foreach
 
 		return $sanitized;
 	}
