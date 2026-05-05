@@ -99,7 +99,7 @@ class NotificationProcessor {
 	 * @since 10.7.0
 	 */
 	public function register(): void {
-		add_action( self::SAFETY_NET_HOOK, array( $this, 'handle_safety_net' ), 10, 2 );
+		add_action( self::SAFETY_NET_HOOK, array( $this, 'handle_safety_net' ), 10, 3 );
 	}
 
 	/**
@@ -233,18 +233,23 @@ class NotificationProcessor {
 	 *
 	 * @param string $type        The notification type.
 	 * @param int    $resource_id The resource ID.
+	 * @param string $event_type  Optional event subtype (e.g. for stock notifications).
 	 * @return void
 	 *
 	 * @since 10.7.0
 	 */
-	public function handle_safety_net( string $type, int $resource_id ): void {
+	public function handle_safety_net( string $type, int $resource_id, string $event_type = '' ): void {
 		try {
-			$notification = Notification::from_array(
-				array(
-					'type'        => $type,
-					'resource_id' => $resource_id,
-				)
+			$data = array(
+				'type'        => $type,
+				'resource_id' => $resource_id,
 			);
+
+			if ( '' !== $event_type ) {
+				$data['event_type'] = $event_type;
+			}
+
+			$notification = Notification::from_array( $data );
 
 			$this->process( $notification, true );
 		} catch ( Exception $e ) {
