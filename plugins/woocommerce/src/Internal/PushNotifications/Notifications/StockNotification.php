@@ -294,6 +294,6 @@ class StockNotification extends Notification {
 						$site_title,
 					),
 				);
-		}
+		}//end switch
 	}
 }
