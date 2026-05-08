@@ -622,6 +622,45 @@ class NotificationProcessorTest extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * @testdox Safety net should propagate the stock quantity captured at trigger time when reconstructing the notification.
+	 */
+	public function test_handle_safety_net_with_stock_quantity_at_trigger(): void {
+		$product = WC_Helper_Product::create_simple_product(
+			true,
+			array(
+				'manage_stock'   => true,
+				// Product currently shows stock=5 (the dispatcher might re-fetch and see this).
+				'stock_quantity' => 5,
+			)
+		);
+
+		$captured_payload = null;
+		$this->dispatcher
+			->expects( $this->once() )
+			->method( 'dispatch' )
+			->with(
+				$this->callback(
+					function ( $notification ) use ( &$captured_payload ) {
+						$captured_payload = $notification->to_payload();
+						return true;
+					}
+				)
+			)
+			->willReturn(
+				array(
+					'success'     => true,
+					'retry_after' => null,
+				)
+			);
+
+		// Trigger-time stock was 1 (post-decrement), even though current product stock is 5.
+		$this->sut->handle_safety_net( 'store_stock', $product->get_id(), 'low_stock', 1 );
+
+		$this->assertNotNull( $captured_payload );
+		$this->assertSame( '1', $captured_payload['message']['args'][1] );
+	}
+
+	/**
 	 * @testdox Should skip dispatch for stock notification when the matching sub-flag is disabled.
 	 */
 	public function test_process_skips_dispatch_when_stock_sub_flag_disabled(): void {

@@ -64,7 +64,7 @@ class StockNotificationTriggerTest extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * @testdox Should add a notification when the low stock hook fires.
+	 * @testdox Should add a notification when the low stock hook fires and capture the stock quantity at trigger time.
 	 */
 	public function test_low_stock_hook_adds_notification(): void {
 		$product = WC_Helper_Product::create_simple_product(
@@ -82,6 +82,10 @@ class StockNotificationTriggerTest extends WC_Unit_Test_Case {
 		$notifications = $this->store->get_all();
 		$this->assertInstanceOf( StockNotification::class, $notifications[0] );
 		$this->assertSame( StockNotification::EVENT_LOW_STOCK, $notifications[0]->get_event_type() );
+
+		// The stock snapshot is captured at trigger time so the dispatcher (which runs in a separate process)
+		// doesn't read a stale value if cache invalidation hasn't propagated.
+		$this->assertSame( 2, $notifications[0]->to_array()['stock_quantity_at_trigger'] );
 	}
 
 	/**

@@ -37,16 +37,34 @@ class StockNotification extends Notification {
 	private string $event_type;
 
 	/**
+	 * Stock quantity captured at the moment the WC stock event fired.
+	 *
+	 * Captured at trigger time rather than read at dispatch time so the
+	 * notification reflects the threshold-crossing moment, not whatever
+	 * stock level the product happens to be at when the dispatcher (which
+	 * runs in a separate process — internal REST endpoint or ActionScheduler
+	 * safety net) eventually re-fetches the product. Avoids stale-cache reads
+	 * and remains correct even if subsequent orders reduce stock further
+	 * before dispatch.
+	 *
+	 * Only meaningful for the low_stock event today; null for the other two.
+	 *
+	 * @var int|null
+	 */
+	private ?int $stock_quantity_at_trigger;
+
+	/**
 	 * Creates a new StockNotification instance.
 	 *
-	 * @param int    $resource_id The product ID.
-	 * @param string $event_type  One of the EVENT_* constants.
+	 * @param int      $resource_id              The product ID.
+	 * @param string   $event_type               One of the EVENT_* constants.
+	 * @param int|null $stock_quantity_at_trigger Stock quantity captured when the WC stock event fired, or null if unknown.
 	 *
 	 * @throws InvalidArgumentException If the resource ID or event type is invalid.
 	 *
 	 * @since 10.9.0
 	 */
-	public function __construct( int $resource_id, string $event_type = self::EVENT_LOW_STOCK ) {
+	public function __construct( int $resource_id, string $event_type = self::EVENT_LOW_STOCK, ?int $stock_quantity_at_trigger = null ) {
 		parent::__construct( $resource_id );
 
 		if ( ! in_array( $event_type, self::VALID_EVENT_TYPES, true ) ) {
@@ -54,7 +72,8 @@ class StockNotification extends Notification {
 			throw new InvalidArgumentException( sprintf( 'Invalid stock notification event type: %s', $event_type ) );
 		}
 
-		$this->event_type = $event_type;
+		$this->event_type                = $event_type;
+		$this->stock_quantity_at_trigger = $stock_quantity_at_trigger;
 	}
 
 	/**
@@ -77,18 +96,21 @@ class StockNotification extends Notification {
 	 * @since 10.9.0
 	 */
 	public function hydrate( array $data ): void {
-		if ( ! array_key_exists( 'event_type', $data ) ) {
-			return;
+		if ( array_key_exists( 'event_type', $data ) ) {
+			$event_type = $data['event_type'];
+
+			if ( ! in_array( $event_type, self::VALID_EVENT_TYPES, true ) ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+				throw new InvalidArgumentException( sprintf( 'Invalid stock notification event type during hydrate: %s', is_scalar( $event_type ) ? (string) $event_type : gettype( $event_type ) ) );
+			}
+
+			$this->event_type = $event_type;
 		}
 
-		$event_type = $data['event_type'];
-
-		if ( ! in_array( $event_type, self::VALID_EVENT_TYPES, true ) ) {
-			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
-			throw new InvalidArgumentException( sprintf( 'Invalid stock notification event type during hydrate: %s', is_scalar( $event_type ) ? (string) $event_type : gettype( $event_type ) ) );
+		if ( array_key_exists( 'stock_quantity_at_trigger', $data ) ) {
+			$stock                           = $data['stock_quantity_at_trigger'];
+			$this->stock_quantity_at_trigger = is_int( $stock ) ? $stock : null;
 		}
-
-		$this->event_type = $event_type;
 	}
 
 	/**
@@ -128,17 +150,21 @@ class StockNotification extends Notification {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * Extends the parent array with `event_type` so the field survives
-	 * serialization through the safety-net scheduler.
+	 * Extends the parent array with `event_type` and the trigger-time stock
+	 * snapshot so both fields survive serialization through the safety-net
+	 * scheduler and the internal-REST round-trip.
 	 *
-	 * @return array{type: string, resource_id: int, event_type: string}
+	 * @return array{type: string, resource_id: int, event_type: string, stock_quantity_at_trigger: int|null}
 	 *
 	 * @since 10.9.0
 	 */
 	public function to_array(): array {
 		return array_merge(
 			parent::to_array(),
-			array( 'event_type' => $this->event_type )
+			array(
+				'event_type'                => $this->event_type,
+				'stock_quantity_at_trigger' => $this->stock_quantity_at_trigger,
+			)
 		);
 	}
 
@@ -268,7 +294,7 @@ class StockNotification extends Notification {
 	 *
 	 * @param string     $product_name The sanitized product name.
 	 * @param string     $site_title   The sanitized site title.
-	 * @param WC_Product $product      The product object.
+	 * @param WC_Product $product      The product object (used as a fallback when no trigger-time stock was captured).
 	 * @return array{format: string, args: string[]}
 	 */
 	private function build_message( string $product_name, string $site_title, WC_Product $product ): array {
@@ -286,11 +312,15 @@ class StockNotification extends Notification {
 				);
 
 			default:
+				$stock = null !== $this->stock_quantity_at_trigger
+					? $this->stock_quantity_at_trigger
+					: $product->get_stock_quantity();
+
 				return array(
 					'format' => '%1$s is running low (%2$s remaining) on %3$s',
 					'args'   => array(
 						$product_name,
-						(string) $product->get_stock_quantity(),
+						(string) $stock,
 						$site_title,
 					),
 				);

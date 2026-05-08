@@ -125,6 +125,26 @@ class StockNotificationTest extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * @testdox Should prefer the trigger-time stock snapshot over the product's current stock so cache lag in the dispatcher process can't surface a stale value.
+	 */
+	public function test_to_payload_uses_stock_quantity_at_trigger_for_low_stock(): void {
+		// Product currently shows stock=5 — simulating what a stale-cache re-fetch in the dispatcher process might return.
+		$product = WC_Helper_Product::create_simple_product(
+			true,
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 5,
+			)
+		);
+
+		// But at trigger time, the actual post-decrement stock was 1. That's what the merchant should see in the push.
+		$notification = new StockNotification( $product->get_id(), StockNotification::EVENT_LOW_STOCK, 1 );
+		$payload      = $notification->to_payload();
+
+		$this->assertSame( '1', $payload['message']['args'][1] );
+	}
+
+	/**
 	 * @testdox Should return null when the product no longer exists.
 	 */
 	public function test_to_payload_returns_null_for_deleted_product(): void {
@@ -178,6 +198,41 @@ class StockNotificationTest extends WC_Unit_Test_Case {
 		$notification->hydrate( array() );
 
 		$this->assertSame( StockNotification::EVENT_OUT_OF_STOCK, $notification->get_event_type() );
+	}
+
+	/**
+	 * @testdox to_array should include the trigger-time stock snapshot when present.
+	 */
+	public function test_to_array_includes_stock_quantity_at_trigger(): void {
+		$notification = new StockNotification( 42, StockNotification::EVENT_LOW_STOCK, 1 );
+		$data         = $notification->to_array();
+
+		$this->assertArrayHasKey( 'stock_quantity_at_trigger', $data );
+		$this->assertSame( 1, $data['stock_quantity_at_trigger'] );
+	}
+
+	/**
+	 * @testdox hydrate should restore stock_quantity_at_trigger from serialized data so the safety-net path keeps the threshold-crossing value.
+	 */
+	public function test_hydrate_restores_stock_quantity_at_trigger(): void {
+		$product = WC_Helper_Product::create_simple_product(
+			true,
+			array(
+				'manage_stock'   => true,
+				'stock_quantity' => 5,
+			)
+		);
+
+		$notification = new StockNotification( $product->get_id(), StockNotification::EVENT_LOW_STOCK );
+		$notification->hydrate(
+			array(
+				'event_type'                => StockNotification::EVENT_LOW_STOCK,
+				'stock_quantity_at_trigger' => 1,
+			)
+		);
+
+		$payload = $notification->to_payload();
+		$this->assertSame( '1', $payload['message']['args'][1] );
 	}
 
 	/**
