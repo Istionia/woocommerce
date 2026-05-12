@@ -344,7 +344,7 @@ class WC_AJAX {
 					continue;
 				}
 				$chosen_shipping_methods[ $i ] = $value;
-				wc_set_chosen_shipping_method_origin( $i, 'manual' );
+				wc_set_chosen_shipping_method_origin( $i, 'manual', $value );
 			}
 		}
 
@@ -413,7 +413,7 @@ class WC_AJAX {
 					continue;
 				}
 				$chosen_shipping_methods[ $i ] = $value;
-				wc_set_chosen_shipping_method_origin( $i, 'manual' );
+				wc_set_chosen_shipping_method_origin( $i, 'manual', $value );
 			}
 		}
 
