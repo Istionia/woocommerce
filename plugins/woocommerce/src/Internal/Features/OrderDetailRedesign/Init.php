@@ -50,4 +50,20 @@ class Init {
 	public function handle_admin_body_class( string $classes ): string {
 		return $classes . ' woocommerce-feature-enabled-' . self::FEATURE_ID;
 	}
+
+	/**
+	 * Returns true when the order detail redesign feature flag is enabled.
+	 *
+	 * Use this from rendering code paths (meta box registrations, output
+	 * callbacks) to decide whether to emit the redesigned UI. Screen scoping
+	 * is left to the calling context — the meta box callbacks here only run
+	 * on order edit screens, so a separate screen check would be redundant.
+	 *
+	 * @internal
+	 *
+	 * @return bool
+	 */
+	public static function is_enabled(): bool {
+		return \Automattic\WooCommerce\Admin\Features\Features::is_enabled( self::FEATURE_ID );
+	}
 }
