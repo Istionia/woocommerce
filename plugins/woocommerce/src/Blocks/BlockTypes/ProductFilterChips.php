@@ -74,17 +74,19 @@ final class ProductFilterChips extends AbstractBlock {
 		$first_item     = reset( $items );
 		$show_counts    = is_array( $first_item ) && array_key_exists( 'count', $first_item );
 
+		$items_wrapper_attributes = array(
+			'class'               => 'wc-block-product-filter-chips__items',
+			'data-wp-interactive' => $store_namespace,
+		);
+
 		ob_start();
 		?>
 		<div <?php echo get_block_wrapper_attributes( $wrapper_attributes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
-			<fieldset>
+			<fieldset class="wc-block-product-filter-chips__fieldset">
 				<?php if ( ! empty( $block_context['groupLabel'] ) ) : ?>
 					<legend class="screen-reader-text"><?php echo esc_html( $block_context['groupLabel'] ); ?></legend>
 				<?php endif; ?>
-				<div
-					class="wc-block-product-filter-chips__items"
-					data-wp-interactive="<?php echo esc_attr( $store_namespace ); ?>"
-				>
+				<div <?php echo get_block_wrapper_attributes( $items_wrapper_attributes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 					<?php
 					foreach ( $visible_items as $index => $item ) :
 						$context_item = array_merge( $item, array( 'index' => $index ) );
